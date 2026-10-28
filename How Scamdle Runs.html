@@ -1,0 +1,271 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>How Scamdle Runs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one readable column like a printed team handbook; wide tables and diagrams scroll inside their own boxes. */
+:root {
+  --bg: #f7f8f6;
+  --surface: #ffffff;
+  --ink: #18231f;
+  --muted: #55625c;
+  --line: #d9dfdb;
+  --accent: #0f6b55;
+  --flag: #c2410c;
+  --flag-bg: #fff1e8;
+  --code-bg: #eef2ef;
+  --display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111715; --surface: #18201d; --ink: #e6ece9; --muted: #9aa8a1; --line: #2c3833;
+    --accent: #5fc9a8; --flag: #fb923c; --flag-bg: #2a1c13; --code-bg: #1f2a26; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111715; --surface: #18201d; --ink: #e6ece9; --muted: #9aa8a1; --line: #2c3833;
+  --accent: #5fc9a8; --flag: #fb923c; --flag-bg: #2a1c13; --code-bg: #1f2a26; color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 2.5rem 4rem;
+}
+.page { max-width: 44rem; margin: 0 auto; display: flex; flex-direction: column; gap: 3rem; }
+section { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.2rem, 7vw, 3.2rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; padding-top: 1.5rem; border-top: 2px solid var(--ink); }
+h3 { font-size: 1.15rem; font-weight: 600; }
+p, ul, ol { margin: 0; }
+ul, ol { padding-left: 1.3rem; display: flex; flex-direction: column; gap: 0.4rem; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+strong { font-weight: 700; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+
+.lede { font-size: 1.2rem; color: var(--muted); max-width: 38rem; }
+.byline { font-size: 0.9rem; color: var(--muted); }
+
+/* The four places */
+.places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.place { background: var(--surface); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.place h3 { color: var(--accent); }
+.place p { font-size: 0.97rem; }
+.place .for { font-size: 0.85rem; color: var(--muted); }
+@media (max-width: 560px) { .places { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.97rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: none; }
+th { font-family: var(--display); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+td:first-child { font-weight: 700; white-space: nowrap; }
+
+/* Steps of a task */
+.steps { list-style: none; padding: 0; counter-reset: step; gap: 0; border-left: 2px solid var(--line); margin-left: 0.9rem; }
+.steps li { counter-increment: step; position: relative; padding: 0 0 1.1rem 1.6rem; }
+.steps li::before {
+  content: counter(step); position: absolute; left: -0.95rem; top: 0.05rem;
+  width: 1.75rem; height: 1.75rem; border-radius: 50%; background: var(--bg); border: 2px solid var(--accent);
+  color: var(--accent); font-family: var(--display); font-weight: 800; font-size: 0.85rem;
+  display: grid; place-items: center;
+}
+.steps li.you::before { background: var(--accent); color: var(--bg); }
+.steps strong { display: block; }
+.steps span { color: var(--muted); font-size: 0.95rem; }
+
+/* Glossary */
+dl { margin: 0; display: grid; grid-template-columns: minmax(7.5rem, max-content) minmax(0, 1fr); gap: 0.9rem 1.4rem; }
+dt { font-family: var(--display); font-weight: 600; }
+dd { margin: 0; min-width: 0; }
+dd .like { color: var(--muted); font-style: italic; }
+@media (max-width: 560px) { dl { grid-template-columns: minmax(0, 1fr); gap: 0.2rem; } dd { margin-bottom: 0.8rem; } }
+
+/* Red-flag rules */
+.rules { background: var(--flag-bg); border-left: 4px solid var(--flag); border-radius: 0 10px 10px 0; padding: 1.1rem 1.3rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.rules h3 { color: var(--flag); }
+
+.copies { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.copy { border-top: 3px solid var(--line); padding-top: 0.7rem; display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.copy.live { border-top-color: var(--accent); }
+.copy p { font-size: 0.95rem; }
+.copy .who { font-size: 0.85rem; color: var(--muted); }
+@media (max-width: 640px) { .copies { grid-template-columns: minmax(0, 1fr); } }
+
+.todo li { color: var(--ink); }
+.todo .owner { color: var(--muted); font-size: 0.92rem; }
+
+footer { font-size: 0.9rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 1rem; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="page">
+
+  <header style="display:flex;flex-direction:column;gap:0.9rem">
+    <h1>How Scamdle runs</h1>
+    <p class="lede">Everything we've set up so far, in plain words. You don't need any experience with websites to follow this. Read it once from top to bottom; it takes about ten minutes.</p>
+    <p class="byline">Written for the Scamdle team · state as of 28 October 2026</p>
+  </header>
+
+  <section>
+    <h2>The short version</h2>
+    <p>We use three tools. Each one has exactly one job, so you always know where something belongs.</p>
+    <div class="places">
+      <div class="place">
+        <h3>Notion</h3>
+        <p>Where we <strong>think and keep track</strong>. Your journal (including your hours), your ideas and questions, research, scam screenshots, meeting notes.</p>
+        <p class="for">You'll use it every week.</p>
+      </div>
+      <div class="place">
+        <h3>GitHub</h3>
+        <p>Where we <strong>plan the work and keep the code</strong>. Every task is an "issue" with an owner and a week. The board shows them all.</p>
+        <p class="for">You'll use it every time you work on a task.</p>
+      </div>
+      <div class="place">
+        <h3>Vercel</h3>
+        <p>Where the website <strong>lives on the internet</strong>. It builds the site automatically from the code in GitHub, so we never upload anything by hand.</p>
+        <p class="for">You'll mostly see it as a link on your pull request.</p>
+      </div>
+    </div>
+    <p>A simple rule decides between Notion and GitHub: <strong>if someone has to do it, it's a GitHub issue. If it's a thought, a finding or a question, it goes in your Notion journal.</strong></p>
+  </section>
+
+  <section>
+    <h2>Your week</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>When</th><th>What you do</th></tr></thead>
+        <tbody>
+          <tr><td>While you work</td><td>Write in your <strong>journal</strong> in Notion under four headings: Work done, Ideas, Questions / concerns, What comes next. A few honest lines beat a long text written the night before. "Example journal week" shows what a good week looks like.</td></tr>
+          <tr><td>While you work</td><td>Write <strong>how long each task took</strong> next to it under Work done, for example <code>Set up the GitHub organisation (#1), 2 h</code>, and end the week with a total. Do it the same day: hours guessed a week later are guesses. Together with GitHub, this shows what everyone put in, which we need for the final report.</td></tr>
+          <tr><td>Wednesday + Friday</td><td>Post three lines in the Discord: <strong>Done</strong> / <strong>Next</strong> / <strong>Stuck on</strong>.</td></tr>
+          <tr><td>Tuesday, ~30 min</td><td><strong>Team meeting.</strong> Everyone talks for about 3 minutes from their journal. That week's note-taker writes it down in Notion under "Meetings". Anything that needs doing becomes a GitHub issue.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Who takes notes when is on the "Rotation schedule" page in Notion. Jasper runs every meeting.</p>
+  </section>
+
+  <section>
+    <h2>How a task gets from idea to website</h2>
+    <p>This is the path every change takes, whether it's a new page, a fix or one word in the README. The filled circles are things you do; the rest happens automatically or is done by a reviewer.</p>
+    <ol class="steps">
+      <li class="you"><strong>Pick up your issue</strong><span>On the board, open your team's view or filter by your name. Each issue has a week (W3, W4…) and a size: S is up to 2 hours, M up to 5.</span></li>
+      <li class="you"><strong>Make a branch</strong><span>A branch is your own private copy of the code to work in. Nothing you do there affects anyone else until it's merged.</span></li>
+      <li class="you"><strong>Make your change, commit, push</strong><span>A commit is a saved step with a short note. Pushing sends your branch to GitHub.</span></li>
+      <li class="you"><strong>Open a pull request (PR)</strong><span>A PR says "here's my change, please check it and add it to the real thing". Write in it what you did and which issue it closes, for example "Closes #23".</span></li>
+      <li><strong>Automatic checks run</strong><span>GitHub checks the code for mistakes (lint, typecheck, tests). Vercel builds a preview of the site with your change. Both need a green ✅.</span></li>
+      <li class="you"><strong>Click through your preview</strong><span>The Vercel bot posts a "Visit Preview" link on your PR. Open it, ideally on a phone too, and check your change really works. Paste the link in the PR description.</span></li>
+      <li><strong>Someone reviews and approves</strong><span>Jasper or Gijs is asked automatically. You can't approve your own PR; nobody can.</span></li>
+      <li><strong>Jasper or Gijs merges</strong><span>Only they can add changes to <code>main</code>, the version that runs the real website. Nobody can push to <code>main</code> directly, them included.</span></li>
+      <li><strong>The real website updates</strong><span>About a minute after the merge, Vercel builds <code>main</code> and replaces the live site. If something goes badly wrong, Vercel can put the previous version back in seconds.</span></li>
+    </ol>
+    <p>New to branches and pull requests? <code>docs/how-we-work.md</code> in the repository walks through one whole task with pictures.</p>
+  </section>
+
+  <section>
+    <h2>What the app is made of</h2>
+    <p>The app is one project that holds both the website and the tools to manage its content. You'll hear these words a lot:</p>
+    <dl>
+      <dt>Next.js</dt>
+      <dd>The framework that makes the website: the pages players see. <span class="like">The house.</span></dd>
+      <dt>Payload</dt>
+      <dd>A content management system (CMS) built into the same project. It gives us an admin panel, logins and a way to store exercises without building any of that ourselves. <span class="like">The back office.</span></dd>
+      <dt>/admin</dt>
+      <dd>The admin panel, at the website address plus <code>/admin</code>. The team logs in here to write exercises, upload screenshots and manage accounts. No coding needed. Players never see it.</dd>
+      <dt>Exercises</dt>
+      <dd>Each exercise has a title, a category (email, links, messages, fake screens, AI media), a format (spot the red flags, real or fake, what would you do next) and a status: Draft → In review → Published. Only published exercises are visible to the public. The exact format of an exercise is still being decided in issue #15.</dd>
+      <dt>/api</dt>
+      <dd>The same data in raw form for computers, at the website address plus <code>/api</code>. For example <code>/api/exercises</code> lists exercises. The website itself mostly fetches its data internally and doesn't go through this.</dd>
+      <dt>Database (Neon)</dt>
+      <dd>Where everything is stored: accounts, exercises and later every answer players give. It runs on a service called Neon, in Frankfurt. <span class="like">The filing cabinet.</span></dd>
+      <dt>Migration</dt>
+      <dd>A small file that describes a change to how the database is organised, for example "exercises now have a difficulty field". Migrations make sure every copy of the database changes the same way. Vercel applies them automatically when it builds the site.</dd>
+      <dt>Tailwind</dt>
+      <dd>The styling system for the pages: colours, sizes and spacing, written as short class names in the code.</dd>
+      <dt>Checks (CI)</dt>
+      <dd>Automatic tests that run on every pull request: lint spots sloppy code, typecheck spots mix-ups like text where a number belongs, and tests check that our logic gives the right answers.</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Three copies of the site</h2>
+    <p>There is more than one version of the website at any moment. Each has its own database, so testing can never break what real people use.</p>
+    <div class="copies">
+      <div class="copy live">
+        <h3>The real one</h3>
+        <p>Built from <code>main</code>. This is what testers and relatives will use.</p>
+        <p class="who">Changes only when Jasper or Gijs merges.</p>
+      </div>
+      <div class="copy">
+        <h3>Previews</h3>
+        <p>One per pull request, with its own copy of the database. Break whatever you like there.</p>
+        <p class="who">Link on your PR, updates on every push.</p>
+      </div>
+      <div class="copy">
+        <h3>Your own (coming)</h3>
+        <p>The app running on your laptop. Everyone gets a personal database copy first (issue #173).</p>
+        <p class="who">Wait for your login details.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Five rules</h2>
+    <div class="rules">
+      <h3>Please don't skip these</h3>
+      <ul>
+        <li><strong>Don't run the app on your laptop yet.</strong> Until #173 is done, the local setup would point at the real database.</li>
+        <li><strong>Never post passwords, database addresses or <code>.env</code> files</strong> in Discord, Notion or GitHub. The repository is public.</li>
+        <li><strong>Never change the database by hand.</strong> Changing an exercise field means writing a migration (ask in your journal if unsure).</li>
+        <li><strong>Remove names, phone numbers and account details</strong> from real scam screenshots before saving them anywhere.</li>
+        <li><strong>Check your own preview</strong> before asking for a review.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>What's done and what isn't</h2>
+    <h3>Done</h3>
+    <ul>
+      <li>Notion workspace with journals, the example week, meeting protocol, rotation and meeting notes.</li>
+      <li>Everyone in the GitHub organisation, in a backend or frontend team, with all 166 tasks assigned.</li>
+      <li>The app skeleton (#14): website, admin panel, database, automatic checks, previews for every pull request, and the real site online.</li>
+      <li>Protection on <code>main</code>: pull request, one approval and green checks required; only Jasper and Gijs merge.</li>
+    </ul>
+    <h3>Still to do</h3>
+    <ul class="todo">
+      <li>A personal database copy for everyone, so you can run the app locally (#173) <span class="owner">· Jasper, W3</span></li>
+      <li>Agree on the exact exercise format (#15) <span class="owner">· Jasper with Hugo and Marlon</span></li>
+      <li>Later, each in its own issue: translations, accessible components, image storage, login emails, end-to-end tests.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Links</h2>
+    <ul>
+      <li>Code and docs: <a href="https://github.com/scamdle/app">github.com/scamdle/app</a></li>
+      <li>Task board: <a href="https://github.com/orgs/scamdle/projects/1">github.com/orgs/scamdle/projects/1</a></li>
+      <li>The plan (what we build and when): <a href="https://github.com/scamdle/app/blob/main/docs/plan.md">docs/plan.md</a></li>
+      <li>How branches and pull requests work: <a href="https://github.com/scamdle/app/blob/main/docs/how-we-work.md">docs/how-we-work.md</a></li>
+      <li>Notion workspace: <a href="https://app.notion.com/p/4052960656548165ba4bf9f5d4bc13e0">Scamdle on Notion</a> (ask Jasper for an invite if it doesn't open)</li>
+    </ul>
+  </section>
+
+  <footer>Something here unclear? That's a good question for your journal, and for Tuesday.</footer>
+</div>
+
+</body></html>
